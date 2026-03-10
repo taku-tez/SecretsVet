@@ -1,0 +1,42 @@
+---
+# SV2060: missing mount and path, SV2080: no leaseRenewalPercent
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultDynamicSecret
+metadata:
+  name: db-creds
+  namespace: production
+spec:
+  destination:
+    name: db-creds-secret
+  vaultAuthRef: vault-auth
+---
+# SV2060: path with double slash
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: app-config
+  namespace: production
+spec:
+  mount: secret
+  path: myapp//config
+  destination:
+    name: app-config-secret
+  vaultAuthRef: vault-auth
+---
+# SV2070: wildcard serviceAccount + admin policy
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: vault-auth
+  namespace: production
+spec:
+  method: kubernetes
+  mount: kubernetes
+  kubernetes:
+    role: cluster-admin
+    serviceAccountName: vault-sa
+    serviceAccountNames:
+      - "*"
+    policies:
+      - root
+      - read-secrets

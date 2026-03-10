@@ -72,6 +72,7 @@ type sarifMessage struct {
 }
 
 var sarifRuleCatalog = []sarifRule{
+	// v0.1.0 — Static manifest detection
 	{ID: "SV1010", Name: "EnvValueSecretPattern", ShortDescription: sarifMessage{Text: "Secret pattern detected in env[].value"}},
 	{ID: "SV1020", Name: "EnvValueHighEntropy", ShortDescription: sarifMessage{Text: "High-entropy string in env[].value"}},
 	{ID: "SV1030", Name: "ArgsCommandSecret", ShortDescription: sarifMessage{Text: "Secret detected in args[] or command[]"}},
@@ -80,6 +81,17 @@ var sarifRuleCatalog = []sarifRule{
 	{ID: "SV1060", Name: "SecretDataHighEntropy", ShortDescription: sarifMessage{Text: "High-entropy value in Secret data"}},
 	{ID: "SV1070", Name: "SecretNotImmutable", ShortDescription: sarifMessage{Text: "Secret missing immutable: true"}},
 	{ID: "SV1080", Name: "CrossNamespaceSecretRef", ShortDescription: sarifMessage{Text: "Cross-namespace Secret reference detected"}},
+	// v0.2.0 — External Secrets validation
+	{ID: "SV2010", Name: "ESKeyRefInvalid", ShortDescription: sarifMessage{Text: "ExternalSecret key reference is empty or malformed"}},
+	{ID: "SV2020", Name: "StoreConfigMissing", ShortDescription: sarifMessage{Text: "SecretStore provider configuration is incomplete"}},
+	{ID: "SV2030", Name: "RefreshIntervalTooLong", ShortDescription: sarifMessage{Text: "ExternalSecret refreshInterval exceeds 24h"}},
+	{ID: "SV2040", Name: "CreationPolicyMerge", ShortDescription: sarifMessage{Text: "ExternalSecret uses risky creationPolicy: Merge"}},
+	{ID: "SV2050", Name: "KeyPathTypo", ShortDescription: sarifMessage{Text: "Possible typo in ExternalSecret remoteRef.key path"}},
+	{ID: "SV2060", Name: "VaultPathMissing", ShortDescription: sarifMessage{Text: "VaultSecret path or mount configuration is missing"}},
+	{ID: "SV2070", Name: "VaultRoleOverprivileged", ShortDescription: sarifMessage{Text: "VaultAuth role grants excessive permissions"}},
+	{ID: "SV2080", Name: "LeaseRenewalMissing", ShortDescription: sarifMessage{Text: "VaultDynamicSecret missing leaseRenewalPercent"}},
+	{ID: "SV2090", Name: "IAMOverPermission", ShortDescription: sarifMessage{Text: "SecretStore IAM role has overly broad permissions"}},
+	{ID: "SV2100", Name: "RotationDisabled", ShortDescription: sarifMessage{Text: "ExternalSecret auto-rotation is disabled or pinned"}},
 }
 
 func severityToSarifLevel(s rule.Severity) string {

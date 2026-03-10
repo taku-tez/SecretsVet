@@ -38,20 +38,20 @@ manifestの`env`直書きに留まらず、ConfigMap・git履歴・External Secr
 **Goal:** External Secrets Operator・Vault・AWS/GCP SM の設定ミスを検出する。
 
 ### External Secrets Operator
-- [ ] `ExternalSecret` / `ClusterExternalSecret` のキー参照が正しい形式か検証
-- [ ] `SecretStore` / `ClusterSecretStore` の接続設定の静的検証
-- [ ] `refreshInterval` が過度に長い（24h以上）場合の警告
-- [ ] `CreationPolicy: Merge` による既存Secretへの意図しない上書きリスク検出
-- [ ] 参照先のキーが存在しない可能性のあるパターン検出 (パスの typo など)
+- [x] `ExternalSecret` / `ClusterExternalSecret` のキー参照が正しい形式か検証 (SV2010)
+- [x] `SecretStore` / `ClusterSecretStore` の接続設定の静的検証 (SV2020)
+- [x] `refreshInterval` が過度に長い（24h以上）場合の警告 (SV2030)
+- [x] `CreationPolicy: Merge` による既存Secretへの意図しない上書きリスク検出 (SV2040)
+- [x] 参照先のキーが存在しない可能性のあるパターン検出 (パスの typo など) (SV2050)
 
 ### Vault
-- [ ] `VaultStaticSecret` / `VaultDynamicSecret` のパス設定検証
-- [ ] Vault ロールに過剰な権限が付与されているパターンの検出
-- [ ] `leaseRenewalPercent` 未設定による期限切れリスク警告
+- [x] `VaultStaticSecret` / `VaultDynamicSecret` のパス設定検証 (SV2060)
+- [x] Vault ロールに過剰な権限が付与されているパターンの検出 (SV2070)
+- [x] `leaseRenewalPercent` 未設定による期限切れリスク警告 (SV2080)
 
 ### AWS Secrets Manager / GCP Secret Manager
-- [ ] IAM ロールのシークレット読み取り権限が過剰に広い場合の警告
-- [ ] シークレットの自動ローテーション設定の有無確認
+- [x] IAM ロールのシークレット読み取り権限が過剰に広い場合の警告 (SV2090)
+- [x] シークレットの自動ローテーション設定の有無確認 (SV2100)
 
 ---
 

@@ -7,10 +7,11 @@ type Registry struct {
 	rules []Rule
 }
 
-// NewRegistry returns a Registry with all v0.1.0 rules registered.
+// NewRegistry returns a Registry with all rules registered.
 func NewRegistry() *Registry {
 	return &Registry{
 		rules: []Rule{
+			// v0.1.0 — Static manifest detection
 			NewEnvRegexRule(),
 			NewEnvEntropyRule(),
 			NewArgsSecretsRule(),
@@ -19,6 +20,17 @@ func NewRegistry() *Registry {
 			NewSecretEntropyRule(),
 			NewSecretImmutableRule(),
 			NewCrossNamespaceRule(),
+			// v0.2.0 — External Secrets validation
+			NewESKeyRefRule(),
+			NewStoreConfigRule(),
+			NewRefreshIntervalRule(),
+			NewCreationPolicyRule(),
+			NewKeyTypoRule(),
+			NewVaultPathRule(),
+			NewVaultRoleRule(),
+			NewLeaseRenewalRule(),
+			NewIAMOverPermRule(),
+			NewRotationRule(),
 		},
 	}
 }
