@@ -1,0 +1,138 @@
+# SecretsVet Roadmap
+
+Kubernetes環境における機密情報の漏洩・設定ミスを多層的に検出するセキュリティスキャナー。
+manifestの`env`直書きに留まらず、ConfigMap・git履歴・External Secrets・etcd暗号化まで網羅する。
+
+---
+
+## v0.1.0 — 静的マニフェスト検出 (Week 1–2)
+
+**Goal:** YAMLマニフェストからシークレット関連の設定ミスを検出する。
+
+### シークレット直書き検出
+- [ ] `env[].value` へのパスワード/トークン/キーの正規表現マッチング
+- [ ] `env[].value` への高エントロピー文字列検出
+- [ ] `args[]` / `command[]` へのシークレット埋め込み検出
+- [ ] ConfigMap の `data` フィールドへの平文シークレット検出
+- [ ] Deployment/StatefulSet の `envFrom` で Secret 以外のソースを参照している場合の警告
+
+### Secretリソース設定
+- [ ] `type: Opaque` の Secret に base64 デコードして高エントロピーな値が含まれる検出
+- [ ] Secret に `immutable: true` が設定されていない警告
+- [ ] namespace をまたいだ Secret 参照の検出
+
+### サポートフォーマット
+- [ ] YAML (単一ファイル・複数ドキュメント)
+- [ ] ディレクトリ再帰スキャン
+- [ ] Kustomize 対応 (`kustomize build` 後のマニフェスト)
+
+### 出力フォーマット
+- [ ] TTY (カラー付き)
+- [ ] JSON
+- [ ] SARIF
+
+---
+
+## v0.2.0 — External Secrets 検証 (Week 3–4)
+
+**Goal:** External Secrets Operator・Vault・AWS/GCP SM の設定ミスを検出する。
+
+### External Secrets Operator
+- [ ] `ExternalSecret` / `ClusterExternalSecret` のキー参照が正しい形式か検証
+- [ ] `SecretStore` / `ClusterSecretStore` の接続設定の静的検証
+- [ ] `refreshInterval` が過度に長い（24h以上）場合の警告
+- [ ] `CreationPolicy: Merge` による既存Secretへの意図しない上書きリスク検出
+- [ ] 参照先のキーが存在しない可能性のあるパターン検出 (パスの typo など)
+
+### Vault
+- [ ] `VaultStaticSecret` / `VaultDynamicSecret` のパス設定検証
+- [ ] Vault ロールに過剰な権限が付与されているパターンの検出
+- [ ] `leaseRenewalPercent` 未設定による期限切れリスク警告
+
+### AWS Secrets Manager / GCP Secret Manager
+- [ ] IAM ロールのシークレット読み取り権限が過剰に広い場合の警告
+- [ ] シークレットの自動ローテーション設定の有無確認
+
+---
+
+## v0.3.0 — git 履歴スキャン (Week 5–6)
+
+**Goal:** git リポジトリの履歴に残った機密情報を検出する。
+
+- [ ] git log 全コミット履歴のシークレットスキャン
+- [ ] 削除済みファイルも含めた検出
+- [ ] `.gitignore` の設定ミス検出（`*.env`, `*secret*` が除外されているか）
+- [ ] `.env` / `.env.local` ファイルのコミット検出
+- [ ] Helm `values.yaml` への平文シークレット記載検出
+- [ ] 高エントロピー文字列の検出（Shannonエントロピーベース）
+- [ ] 既知パターンライブラリ: AWS/GCP/GitHub/Slack/Stripe/Twilio トークン
+- [ ] ホワイトリスト設定 (`.secretsvet-ignore`)
+
+---
+
+## v0.4.0 — ライブクラスタースキャン (Week 7–8)
+
+**Goal:** 稼働中クラスターのシークレット設定を検証する。
+
+### etcd暗号化検証
+- [ ] `--encryption-provider-config` の設定確認 (kubectl経由)
+- [ ] `EncryptionConfiguration` で `identity` (無暗号化) が使われていないか
+- [ ] Secret が etcd 上で暗号化されているか (`kubectl get secret -o json` + base64確認)
+
+### ランタイム設定
+- [ ] `automountServiceAccountToken: false` が適切に設定されているか
+- [ ] Secret をマウントしている Pod の `readOnly: true` 確認
+- [ ] Secret の RBAC 参照範囲 (list/watch は特に危険) の検出
+- [ ] `default` ServiceAccount への Secret アクセス権限検出
+
+### クラスタースキャンオプション
+- [ ] `secretsvet --cluster --context <name>`
+- [ ] `--namespace` / `--all-namespaces`
+- [ ] kubeconfig 自動検出
+
+---
+
+## v0.5.0 — LLM修正提案 (Week 9–10)
+
+**Goal:** 検出した問題に対して具体的な修正YAMLを生成する。
+
+- [ ] `--fix` フラグで違反ごとに修正済みYAMLスニペットを出力
+- [ ] `--fix-lang ja` で日本語説明
+- [ ] Secret → ExternalSecret への移行テンプレート生成
+- [ ] 平文値のマスキング後に安全な参照形式へ変換
+
+---
+
+## K8sVet 取り込み計画
+
+| バージョン | K8sVet対応 | 内容 |
+|---|---|---|
+| SecretsVet v0.1.0 完了後 | K8sVet v0.5.0 | `k8svet scan .` に `secretsvet` ランナー追加 |
+| SecretsVet v0.4.0 完了後 | K8sVet v0.5.0 | `k8svet scan --cluster` にシークレット検証追加 |
+| SecretsVet v0.5.0 完了後 | K8sVet v0.6.0 | `k8svet scan . --fix` に SecretsVet 修正提案を統合 |
+
+```bash
+# K8sVet統合後のイメージ
+k8svet scan .
+# → [SecretsVet]  ./                28 errors (secrets in env: 12, git history: 8, ESO config: 8)
+
+k8svet scan --cluster --all-namespaces
+# → [SecretsVet]  cluster://        5 errors (etcd unencrypted, SA token over-exposed x4)
+```
+
+### 自動検出ルール (K8sVet detector)
+- `.env` / `.env.*` ファイルが存在する → SecretsVet を git スキャンモードで実行
+- `ExternalSecret` / `SecretStore` が含まれる YAML → ESO 検証を実行
+- `--cluster` モード → etcd 暗号化・SA トークン設定を検証
+
+---
+
+## ルールID体系
+
+```
+SV1xxx  平文シークレット (manifest)
+SV2xxx  External Secrets 設定ミス
+SV3xxx  git 履歴漏洩
+SV4xxx  etcd / ランタイム設定
+SV5xxx  RBAC × Secret アクセス
+```
