@@ -59,14 +59,14 @@ manifestの`env`直書きに留まらず、ConfigMap・git履歴・External Secr
 
 **Goal:** git リポジトリの履歴に残った機密情報を検出する。
 
-- [ ] git log 全コミット履歴のシークレットスキャン
-- [ ] 削除済みファイルも含めた検出
-- [ ] `.gitignore` の設定ミス検出（`*.env`, `*secret*` が除外されているか）
-- [ ] `.env` / `.env.local` ファイルのコミット検出
-- [ ] Helm `values.yaml` への平文シークレット記載検出
-- [ ] 高エントロピー文字列の検出（Shannonエントロピーベース）
-- [ ] 既知パターンライブラリ: AWS/GCP/GitHub/Slack/Stripe/Twilio トークン
-- [ ] ホワイトリスト設定 (`.secretsvet-ignore`)
+- [x] git log 全コミット履歴のシークレットスキャン (SV3030)
+- [x] 削除済みファイルも含めた検出 (--diff-filter=AM)
+- [x] `.gitignore` の設定ミス検出（`*.env`, `*secret*` が除外されているか）(SV3010)
+- [x] `.env` / `.env.local` ファイルのコミット検出 (SV3020)
+- [x] Helm `values.yaml` への平文シークレット記載検出 (SV3050)
+- [x] 高エントロピー文字列の検出（Shannonエントロピーベース）(SV3040)
+- [x] 既知パターンライブラリ: AWS/GCP/GitHub/Slack/Stripe/Twilio トークン (detector/pattern.go)
+- [x] ホワイトリスト設定 (`.secretsvet-ignore`)
 
 ---
 

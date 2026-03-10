@@ -72,3 +72,10 @@ func (f *JSONFormatter) Write(w io.Writer, result *scanner.ScanResult) error {
 
 // Ensure rule package is imported for type safety in other files
 var _ rule.Severity = rule.SeverityHigh
+
+// jsonEncoder returns a configured JSON encoder for output writers.
+func jsonEncoder(w io.Writer) *json.Encoder {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc
+}
