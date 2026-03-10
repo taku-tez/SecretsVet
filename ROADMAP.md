@@ -96,10 +96,10 @@ manifestの`env`直書きに留まらず、ConfigMap・git履歴・External Secr
 
 **Goal:** 検出した問題に対して具体的な修正YAMLを生成する。
 
-- [ ] `--fix` フラグで違反ごとに修正済みYAMLスニペットを出力
-- [ ] `--fix-lang ja` で日本語説明
-- [ ] Secret → ExternalSecret への移行テンプレート生成
-- [ ] 平文値のマスキング後に安全な参照形式へ変換
+- [x] `--fix` フラグで違反ごとに修正済みYAMLスニペットを出力
+- [x] `--fix-lang ja` で日本語説明
+- [x] Secret → ExternalSecret への移行テンプレート生成 (SV1060 fix)
+- [x] 平文値のマスキング後に安全な参照形式へ変換 (valueFrom.secretKeyRef テンプレート)
 
 ---
 
