@@ -75,20 +75,20 @@ manifestの`env`直書きに留まらず、ConfigMap・git履歴・External Secr
 **Goal:** 稼働中クラスターのシークレット設定を検証する。
 
 ### etcd暗号化検証
-- [ ] `--encryption-provider-config` の設定確認 (kubectl経由)
-- [ ] `EncryptionConfiguration` で `identity` (無暗号化) が使われていないか
-- [ ] Secret が etcd 上で暗号化されているか (`kubectl get secret -o json` + base64確認)
+- [x] `--encryption-provider-config` の設定確認 (kubectl経由) (SV4010)
+- [x] `EncryptionConfiguration` で `identity` (無暗号化) が使われていないか (SV4010)
+- [x] Secret が etcd 上で暗号化されているか (`kubectl get secret -o json` + base64確認) (SV4010)
 
 ### ランタイム設定
-- [ ] `automountServiceAccountToken: false` が適切に設定されているか
-- [ ] Secret をマウントしている Pod の `readOnly: true` 確認
-- [ ] Secret の RBAC 参照範囲 (list/watch は特に危険) の検出
-- [ ] `default` ServiceAccount への Secret アクセス権限検出
+- [x] `automountServiceAccountToken: false` が適切に設定されているか (SV4030)
+- [x] Secret をマウントしている Pod の `readOnly: true` 確認 (SV4040)
+- [x] Secret の RBAC 参照範囲 (list/watch は特に危険) の検出 (SV4050)
+- [x] `default` ServiceAccount への Secret アクセス権限検出 (SV4060)
 
 ### クラスタースキャンオプション
-- [ ] `secretsvet --cluster --context <name>`
-- [ ] `--namespace` / `--all-namespaces`
-- [ ] kubeconfig 自動検出
+- [x] `secretsvet cluster-scan --context <name>`
+- [x] `--namespace` / `--all-namespaces`
+- [x] kubeconfig 自動検出 (kubectl が自動使用)
 
 ---
 
