@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clean-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clean-app
+  template:
+    metadata:
+      labels:
+        app: clean-app
+    spec:
+      containers:
+        - name: app
+          image: clean-app:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-keys
+                  key: key

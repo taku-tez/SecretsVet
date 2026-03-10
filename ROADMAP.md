@@ -10,26 +10,26 @@ manifestの`env`直書きに留まらず、ConfigMap・git履歴・External Secr
 **Goal:** YAMLマニフェストからシークレット関連の設定ミスを検出する。
 
 ### シークレット直書き検出
-- [ ] `env[].value` へのパスワード/トークン/キーの正規表現マッチング
-- [ ] `env[].value` への高エントロピー文字列検出
-- [ ] `args[]` / `command[]` へのシークレット埋め込み検出
-- [ ] ConfigMap の `data` フィールドへの平文シークレット検出
-- [ ] Deployment/StatefulSet の `envFrom` で Secret 以外のソースを参照している場合の警告
+- [x] `env[].value` へのパスワード/トークン/キーの正規表現マッチング (SV1010)
+- [x] `env[].value` への高エントロピー文字列検出 (SV1020)
+- [x] `args[]` / `command[]` へのシークレット埋め込み検出 (SV1030)
+- [x] ConfigMap の `data` フィールドへの平文シークレット検出 (SV1040)
+- [x] Deployment/StatefulSet の `envFrom` で Secret 以外のソースを参照している場合の警告 (SV1050)
 
 ### Secretリソース設定
-- [ ] `type: Opaque` の Secret に base64 デコードして高エントロピーな値が含まれる検出
-- [ ] Secret に `immutable: true` が設定されていない警告
-- [ ] namespace をまたいだ Secret 参照の検出
+- [x] `type: Opaque` の Secret に base64 デコードして高エントロピーな値が含まれる検出 (SV1060)
+- [x] Secret に `immutable: true` が設定されていない警告 (SV1070)
+- [x] namespace をまたいだ Secret 参照の検出 (SV1080)
 
 ### サポートフォーマット
-- [ ] YAML (単一ファイル・複数ドキュメント)
-- [ ] ディレクトリ再帰スキャン
-- [ ] Kustomize 対応 (`kustomize build` 後のマニフェスト)
+- [x] YAML (単一ファイル・複数ドキュメント)
+- [x] ディレクトリ再帰スキャン
+- [x] Kustomize 対応 (`kustomize build` 後のマニフェスト)
 
 ### 出力フォーマット
-- [ ] TTY (カラー付き)
-- [ ] JSON
-- [ ] SARIF
+- [x] TTY (カラー付き)
+- [x] JSON
+- [x] SARIF
 
 ---
 
