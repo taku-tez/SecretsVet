@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/SecretsVet/secretsvet/internal/clusterscan"
 	"github.com/fatih/color"
@@ -18,6 +19,7 @@ func (f *ClusterTTYFormatter) Write(w io.Writer, result *clusterscan.ScanResult)
 		color.NoColor = true
 	}
 
+	critColor := color.New(color.FgRed, color.Bold, color.BgRed)
 	highColor := color.New(color.FgRed, color.Bold)
 	medColor := color.New(color.FgYellow)
 	lowColor := color.New(color.FgCyan)
@@ -25,12 +27,14 @@ func (f *ClusterTTYFormatter) Write(w io.Writer, result *clusterscan.ScanResult)
 	for _, finding := range result.Findings {
 		var sev string
 		switch finding.Severity {
+		case clusterscan.SeverityCritical:
+			sev = critColor.Sprint("CRITICAL")
 		case clusterscan.SeverityHigh:
-			sev = highColor.Sprint("HIGH  ")
+			sev = highColor.Sprint("HIGH    ")
 		case clusterscan.SeverityMedium:
-			sev = medColor.Sprint("MEDIUM")
+			sev = medColor.Sprint("MEDIUM  ")
 		case clusterscan.SeverityLow:
-			sev = lowColor.Sprint("LOW   ")
+			sev = lowColor.Sprint("LOW     ")
 		}
 
 		resource := finding.ResourceKind
@@ -52,8 +56,8 @@ func (f *ClusterTTYFormatter) Write(w io.Writer, result *clusterscan.ScanResult)
 		fmt.Fprintln(w)
 	}
 
-	high, medium, low := result.Summary()
-	total := high + medium + low
+	critical, high, medium, low := result.Summary()
+	total := critical + high + medium + low
 
 	ctx := result.Context
 	if ctx == "" {
@@ -64,7 +68,8 @@ func (f *ClusterTTYFormatter) Write(w io.Writer, result *clusterscan.ScanResult)
 		color.New(color.FgGreen).Fprintf(w, "No findings in cluster [%s].\n", ctx)
 	} else {
 		fmt.Fprintf(w, "Found %d finding(s) in cluster [%s]\n", total, ctx)
-		fmt.Fprintf(w, "  %s  %s  %s\n",
+		fmt.Fprintf(w, "  %s  %s  %s  %s\n",
+			critColor.Sprintf("CRITICAL: %d", critical),
 			highColor.Sprintf("HIGH: %d", high),
 			medColor.Sprintf("MEDIUM: %d", medium),
 			lowColor.Sprintf("LOW: %d", low),
@@ -88,10 +93,11 @@ type clusterJSONFinding struct {
 }
 
 type clusterJSONSummary struct {
-	Total  int `json:"total"`
-	High   int `json:"high"`
-	Medium int `json:"medium"`
-	Low    int `json:"low"`
+	Total    int `json:"total"`
+	Critical int `json:"critical"`
+	High     int `json:"high"`
+	Medium   int `json:"medium"`
+	Low      int `json:"low"`
 }
 
 type clusterJSONOutput struct {
@@ -101,15 +107,21 @@ type clusterJSONOutput struct {
 }
 
 func (f *ClusterJSONFormatter) Write(w io.Writer, result *clusterscan.ScanResult) error {
-	high, medium, low := result.Summary()
+	critical, high, medium, low := result.Summary()
 	out := clusterJSONOutput{
 		Context: result.Context,
-		Summary: clusterJSONSummary{Total: high + medium + low, High: high, Medium: medium, Low: low},
+		Summary: clusterJSONSummary{
+			Total:    critical + high + medium + low,
+			Critical: critical,
+			High:     high,
+			Medium:   medium,
+			Low:      low,
+		},
 	}
 	for _, finding := range result.Findings {
 		out.Findings = append(out.Findings, clusterJSONFinding{
 			RuleID:       finding.RuleID,
-			Severity:     string(finding.Severity),
+			Severity:     strings.ToLower(string(finding.Severity)),
 			Message:      finding.Message,
 			ResourceKind: finding.ResourceKind,
 			ResourceName: finding.ResourceName,

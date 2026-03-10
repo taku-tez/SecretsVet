@@ -5,9 +5,10 @@ package clusterscan
 type Severity string
 
 const (
-	SeverityHigh   Severity = "HIGH"
-	SeverityMedium Severity = "MEDIUM"
-	SeverityLow    Severity = "LOW"
+	SeverityCritical Severity = "CRITICAL"
+	SeverityHigh     Severity = "HIGH"
+	SeverityMedium   Severity = "MEDIUM"
+	SeverityLow      Severity = "LOW"
 )
 
 // Finding is a single issue detected in a live cluster.
@@ -28,9 +29,11 @@ type ScanResult struct {
 }
 
 // Summary counts findings by severity.
-func (r *ScanResult) Summary() (high, medium, low int) {
+func (r *ScanResult) Summary() (critical, high, medium, low int) {
 	for _, f := range r.Findings {
 		switch f.Severity {
+		case SeverityCritical:
+			critical++
 		case SeverityHigh:
 			high++
 		case SeverityMedium:

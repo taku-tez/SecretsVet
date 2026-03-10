@@ -54,7 +54,7 @@ func checkSATokenMount(client *cluster.Client) []Finding {
 		if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
 			findings = append(findings, Finding{
 				RuleID:       "SV4030",
-				Severity:     SeverityMedium,
+				Severity:     SeverityLow,
 				Message:      "Pod does not set automountServiceAccountToken: false — service account token is automatically mounted",
 				ResourceKind: "Pod",
 				ResourceName: pod.Metadata.Name,

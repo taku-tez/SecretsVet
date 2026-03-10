@@ -6,9 +6,10 @@ import "github.com/SecretsVet/secretsvet/internal/k8s"
 type Severity string
 
 const (
-	SeverityHigh   Severity = "HIGH"
-	SeverityMedium Severity = "MEDIUM"
-	SeverityLow    Severity = "LOW"
+	SeverityCritical Severity = "CRITICAL"
+	SeverityHigh     Severity = "HIGH"
+	SeverityMedium   Severity = "MEDIUM"
+	SeverityLow      Severity = "LOW"
 )
 
 // Finding is a single detected issue.

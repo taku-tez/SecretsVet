@@ -102,7 +102,7 @@ func scanEnvFiles(repoPath string, ignore *git.IgnoreList) []Finding {
 		}
 		findings = append(findings, Finding{
 			RuleID:     "SV3020",
-			Severity:   SeverityHigh,
+			Severity:   SeverityCritical,
 			Message:    fmt.Sprintf("File '%s' was committed to git history", cf.FilePath),
 			File:       cf.FilePath,
 			CommitHash: short,
@@ -163,7 +163,7 @@ func scanHistory(repoPath string, maxCommits int, ignore *git.IgnoreList) ([]Fin
 				seen[k] = true
 				findings = append(findings, Finding{
 					RuleID:     ruleID,
-					Severity:   SeverityHigh,
+					Severity:   SeverityCritical,
 					Message:    fmt.Sprintf("Secret pattern '%s' found in git history", m.PatternName),
 					File:       line.FilePath,
 					Line:       line.LineNumber,

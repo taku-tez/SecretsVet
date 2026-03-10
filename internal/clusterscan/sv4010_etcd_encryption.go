@@ -70,7 +70,7 @@ func checkEtcdEncryption(client *cluster.Client) []Finding {
 	if !encryptionConfigFound {
 		findings = append(findings, Finding{
 			RuleID:   "SV4010",
-			Severity: SeverityHigh,
+			Severity: SeverityCritical,
 			Message:  "kube-apiserver is not configured with --encryption-provider-config — Secrets are stored unencrypted in etcd",
 			Detail:   "Add --encryption-provider-config to kube-apiserver and configure AES-CBC or AES-GCM encryption for Secrets",
 		})
@@ -123,7 +123,7 @@ func checkEncryptionConfig(client *cluster.Client) []Finding {
 					name, _ := itemMap["metadata"].(map[string]interface{})["name"].(string)
 					findings = append(findings, Finding{
 						RuleID:       "SV4010",
-						Severity:     SeverityHigh,
+						Severity:     SeverityCritical,
 						Message:      "EncryptionConfiguration has 'identity' as the first provider for Secrets — data is not encrypted at rest",
 						ResourceKind: "EncryptionConfiguration",
 						ResourceName: name,

@@ -3,6 +3,7 @@ package output
 import (
 	"encoding/json"
 	"io"
+	"strings"
 
 	"github.com/SecretsVet/secretsvet/internal/rule"
 	"github.com/SecretsVet/secretsvet/internal/scanner"
@@ -25,10 +26,11 @@ type jsonFinding struct {
 }
 
 type jsonSummary struct {
-	Total  int `json:"total"`
-	High   int `json:"high"`
-	Medium int `json:"medium"`
-	Low    int `json:"low"`
+	Total    int `json:"total"`
+	Critical int `json:"critical"`
+	High     int `json:"high"`
+	Medium   int `json:"medium"`
+	Low      int `json:"low"`
 }
 
 type jsonOutput struct {
@@ -38,20 +40,21 @@ type jsonOutput struct {
 }
 
 func (f *JSONFormatter) Write(w io.Writer, result *scanner.ScanResult) error {
-	high, medium, low := result.Summary()
+	critical, high, medium, low := result.Summary()
 	out := jsonOutput{
 		Version: version.Version(),
 		Summary: jsonSummary{
-			Total:  high + medium + low,
-			High:   high,
-			Medium: medium,
-			Low:    low,
+			Total:    critical + high + medium + low,
+			Critical: critical,
+			High:     high,
+			Medium:   medium,
+			Low:      low,
 		},
 	}
 	for _, finding := range result.Findings {
 		out.Findings = append(out.Findings, jsonFinding{
 			RuleID:       finding.RuleID,
-			Severity:     string(finding.Severity),
+			Severity:     strings.ToLower(string(finding.Severity)),
 			Message:      finding.Message,
 			File:         finding.File,
 			Line:         finding.Line,

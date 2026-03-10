@@ -5,9 +5,10 @@ package gitscan
 type Severity string
 
 const (
-	SeverityHigh   Severity = "HIGH"
-	SeverityMedium Severity = "MEDIUM"
-	SeverityLow    Severity = "LOW"
+	SeverityCritical Severity = "CRITICAL"
+	SeverityHigh     Severity = "HIGH"
+	SeverityMedium   Severity = "MEDIUM"
+	SeverityLow      Severity = "LOW"
 )
 
 // Finding represents a single secret detection in git history.
@@ -23,10 +24,11 @@ type Finding struct {
 
 // Summary counts findings by severity.
 type Summary struct {
-	Total  int
-	High   int
-	Medium int
-	Low    int
+	Total    int
+	Critical int
+	High     int
+	Medium   int
+	Low      int
 }
 
 // ScanResult holds all findings from a git scan.
@@ -41,6 +43,8 @@ func (r *ScanResult) Summary() Summary {
 	s := Summary{Total: len(r.Findings)}
 	for _, f := range r.Findings {
 		switch f.Severity {
+		case SeverityCritical:
+			s.Critical++
 		case SeverityHigh:
 			s.High++
 		case SeverityMedium:

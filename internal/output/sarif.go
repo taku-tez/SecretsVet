@@ -96,7 +96,7 @@ var sarifRuleCatalog = []sarifRule{
 
 func severityToSarifLevel(s rule.Severity) string {
 	switch s {
-	case rule.SeverityHigh:
+	case rule.SeverityCritical, rule.SeverityHigh:
 		return "error"
 	case rule.SeverityMedium:
 		return "warning"

@@ -57,6 +57,8 @@ func Scan(opts ScanOptions) (*ScanResult, error) {
 
 func severityLevel(s rule.Severity) int {
 	switch s {
+	case rule.SeverityCritical:
+		return 4
 	case rule.SeverityHigh:
 		return 3
 	case rule.SeverityMedium:
@@ -68,9 +70,11 @@ func severityLevel(s rule.Severity) int {
 }
 
 // Summary returns counts by severity.
-func (r *ScanResult) Summary() (high, medium, low int) {
+func (r *ScanResult) Summary() (critical, high, medium, low int) {
 	for _, f := range r.Findings {
 		switch f.Severity {
+		case rule.SeverityCritical:
+			critical++
 		case rule.SeverityHigh:
 			high++
 		case rule.SeverityMedium:
