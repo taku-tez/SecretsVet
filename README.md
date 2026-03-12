@@ -575,9 +575,10 @@ k8svet scan --cluster --all-namespaces
 ```
 
 K8sVet auto-invokes SecretsVet when it detects:
-- `.env` / `.env.*` files → runs `git-scan` mode
 - `ExternalSecret` / `SecretStore` resources → runs ESO validation
 - `--cluster` flag → runs etcd encryption + SA token checks
+
+> **Planned (not yet available):** Detection of `.env` / `.env.*` files to auto-invoke `git-scan` mode is on the K8sVet roadmap but is not part of the current released integration. Use `secretsvet git-scan .` directly in the meantime.
 
 ---
 
