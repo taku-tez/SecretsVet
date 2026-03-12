@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/SecretsVet/secretsvet/internal/baseline"
 	"github.com/SecretsVet/secretsvet/internal/fixer"
 	"github.com/SecretsVet/secretsvet/internal/output"
 	"github.com/SecretsVet/secretsvet/internal/rule"
@@ -13,13 +14,16 @@ import (
 )
 
 var (
-	recursive   bool
-	kustomize   bool
-	exitCode    bool
-	minSeverity string
-	fixMode     bool
-	fixLang     string
-	fixLLM      bool
+	recursive     bool
+	kustomize     bool
+	exitCode      bool
+	minSeverity   string
+	fixMode       bool
+	fixLang       string
+	fixLLM        bool
+	helmCharts    []string
+	baselineFile  string
+	saveBaseline  string
 )
 
 var scanCmd = &cobra.Command{
@@ -27,14 +31,17 @@ var scanCmd = &cobra.Command{
 	Short: "Scan YAML manifests for secret misconfigurations",
 	Long: `Scan Kubernetes YAML manifests for secret misconfigurations.
 
-Paths can be files or directories. When a directory is given, all .yaml/.yml
-files within it are scanned. Use --recursive to scan subdirectories.
+Paths can be files, directories, or "-" to read from stdin.
+When a directory is given, all .yaml/.yml files within it are scanned.
+Use --recursive to scan subdirectories.
 
 Examples:
   secretsvet scan ./manifests/
   secretsvet scan ./k8s/ --recursive
   secretsvet scan deploy.yaml --output json
-  secretsvet scan ./k8s/ --kustomize --output sarif`,
+  secretsvet scan ./k8s/ --kustomize --output sarif
+  helm template ./mychart | secretsvet scan -
+  kustomize build ./overlays/prod | secretsvet scan -`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runScan,
 }
@@ -47,6 +54,9 @@ func init() {
 	scanCmd.Flags().BoolVar(&fixMode, "fix", false, "Generate fix suggestions for each finding")
 	scanCmd.Flags().StringVar(&fixLang, "fix-lang", "en", "Language for fix explanations: en, ja")
 	scanCmd.Flags().BoolVar(&fixLLM, "fix-llm", false, "Use Claude API for fix suggestions when no static template exists (requires ANTHROPIC_API_KEY)")
+	scanCmd.Flags().StringArrayVar(&helmCharts, "helm", nil, "Run 'helm template <dir>' and scan the output (can be specified multiple times)")
+	scanCmd.Flags().StringVar(&baselineFile, "baseline", "", "Path to baseline file — only report findings not present in the baseline")
+	scanCmd.Flags().StringVar(&saveBaseline, "save-baseline", "", "Save current findings to this file as a new baseline")
 	rootCmd.AddCommand(scanCmd)
 }
 
@@ -60,10 +70,34 @@ func runScan(cmd *cobra.Command, args []string) error {
 		Paths:       args,
 		Recursive:   recursive,
 		Kustomize:   kustomize,
+		HelmCharts:  helmCharts,
 		MinSeverity: minSev,
+		Config:      cfg,
 	})
 	if err != nil {
 		return fmt.Errorf("scan failed: %w", err)
+	}
+
+	// Save baseline before filtering (captures all current findings)
+	if saveBaseline != "" {
+		if err := baseline.Save(saveBaseline, result.Findings); err != nil {
+			return fmt.Errorf("save baseline: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "baseline saved: %s (%d findings)\n", saveBaseline, len(result.Findings))
+	}
+
+	// Apply baseline: suppress known findings
+	if baselineFile != "" {
+		bl, err := baseline.Load(baselineFile)
+		if err != nil {
+			return fmt.Errorf("load baseline: %w", err)
+		}
+		before := len(result.Findings)
+		result.Findings = baseline.Filter(result.Findings, bl)
+		suppressed := before - len(result.Findings)
+		if suppressed > 0 {
+			fmt.Fprintf(os.Stderr, "baseline: suppressed %d known finding(s), %d new\n", suppressed, len(result.Findings))
+		}
 	}
 
 	var formatter output.Formatter
@@ -72,6 +106,8 @@ func runScan(cmd *cobra.Command, args []string) error {
 		formatter = &output.JSONFormatter{}
 	case "sarif":
 		formatter = &output.SARIFFormatter{}
+	case "github-actions":
+		formatter = &output.GitHubActionsFormatter{}
 	default:
 		formatter = &output.TTYFormatter{NoColor: noColor}
 	}

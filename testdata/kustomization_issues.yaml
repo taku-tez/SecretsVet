@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+
+secretGenerator:
+  # SV6020: .env file reference
+  - name: app-secrets-from-env
+    envs:
+      - .env
+      - .env.production
+
+  # SV6030: literal plaintext secret
+  - name: app-secrets-literal
+    literals:
+      - DB_PASSWORD=supersecretpassword  # SV6030 HIGH — suspicious key + value
+      - API_KEY=sk_live_51AbcDEFghIJkl   # SV6030 HIGH — Stripe pattern
+      - APP_PORT=8080                     # should NOT trigger — not suspicious key
+
+  # SV6020: files pointing to secret files
+  - name: tls-certs
+    files:
+      - tls.crt=./certs/tls.crt          # should NOT trigger — .crt not secret file
+      - private_key=./certs/server.key   # SV6020 MEDIUM — key name is secret-like

@@ -103,6 +103,97 @@ manifestの`env`直書きに留まらず、ConfigMap・git履歴・External Secr
 
 ---
 
+## v0.7.0 — Helm / Kustomize 深堀り (Week 11–12)
+
+**Goal:** テンプレートエンジン経由の漏洩を検出する。
+
+- [x] Helm `values.yaml` / `values-*.yaml` への平文シークレット検出 (SV6010)
+- [x] Kustomize `secretGenerator.envs[]` で `.env` ファイルを直接参照する検出 (SV6020)
+- [x] Kustomize `secretGenerator.literals[]` への平文シークレット直書き検出 (SV6030)
+- [x] Helm 管理 Secret への直接管理警告（values.yaml / --set 経由の漏洩リスク）(SV6040)
+- [x] stdin 対応 (`helm template ./chart | secretsvet scan -`)
+- [x] 全4ルールに fix templates 追加（英語・日本語）
+
+---
+
+## v0.9.0 — 即効性改善: ベースライン & DXコマンド (Week 15–16)
+
+**Goal:** 既存チームが導入しやすくし、CLIだけで使い方がわかる自己説明的なツールにする。
+
+### A. ベースライン機能
+- [x] `--save-baseline <file>` — 現在の findings を baseline として保存
+- [x] `--baseline <file>` — 既知の findings を抑制し、新規のみ報告
+- [x] フィンガープリント: リソース名・名前空間・RuleID に基づく（行番号変化に不変）
+- [x] `internal/baseline/` パッケージ（Load / Save / Filter / Fingerprint）
+
+```bash
+# Step 1: 初回導入時に現状を保存
+secretsvet scan . --save-baseline .secretsvet-baseline.json
+
+# Step 2: CI では新規のみ fail
+secretsvet scan . --baseline .secretsvet-baseline.json --exit-code
+```
+
+### B. DXコマンド
+- [x] `secretsvet rules` — 全32ルールを表形式で一覧表示
+- [x] `secretsvet rules --category git` — カテゴリ絞り込み
+- [x] `secretsvet rules --id SV1010` — ルール詳細・Remediation・修正例
+- [x] `secretsvet init [path]` — リポジトリを自動検出して `.secretsvet.yaml` を生成
+  - Helm chart / Kustomize / テストディレクトリ / .env ファイルを検出
+  - `--force` で上書き
+- [x] 全32ルールのメタデータ追加 (`internal/rule/metadata.go`)
+
+---
+
+## v0.8.0 — CI/CD統合強化 (Week 13–14)
+
+**Goal:** GitHub Actions ネイティブ統合・PRスコープスキャン・プロジェクト設定ファイル
+
+### v0.8.0-A — GitHub Actions & インクリメンタルスキャン
+- [x] `--output github-actions` — `::error` / `::warning` アノテーション形式 (scan & git-scan)
+- [x] `git-scan --since <sha>` — PRのベースSHAから差分のみスキャン（フルhistory不要）
+- [x] `scan --helm <chartdir>` — `helm template` 実行→出力を自動スキャン
+
+### v0.8.0-B — `.secretsvet.yaml` 設定ファイル
+- [x] ルール単位での無効化 (`rules.SV6040.disabled: true`)
+- [x] 重大度上書き (`rules.SV1070.severity: HIGH`)
+- [x] パスのグロブ除外 (`ignore.paths: ["tests/**"]`)
+- [x] エントロピー閾値調整 (`thresholds.entropy_min_length: 24`)
+- [x] `--config <path>` でカスタムパス指定
+
+```yaml
+# .secretsvet.yaml — example
+rules:
+  SV6040:
+    disabled: true          # Helm管理Secretの警告を抑制
+  SV1070:
+    severity: HIGH          # immutable警告を重大度アップ
+
+thresholds:
+  entropy_min_length: 24    # デフォルト20より厳しく
+
+ignore:
+  paths:
+    - tests/**
+    - "**/*_test.yaml"
+```
+
+```yaml
+# .github/workflows/secrets.yml — PR annotation example
+- name: Scan manifests
+  run: |
+    secretsvet scan . --output github-actions --exit-code
+
+- name: Scan git history (PR only)
+  run: |
+    secretsvet git-scan . \
+      --since ${{ github.event.pull_request.base.sha }} \
+      --output github-actions \
+      --exit-code
+```
+
+---
+
 ## K8sVet 取り込み計画
 
 | バージョン | K8sVet対応 | 内容 |

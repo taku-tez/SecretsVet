@@ -15,8 +15,9 @@ var _ = filepath.Base
 // ScanOptions controls the git history scan.
 type ScanOptions struct {
 	RepoPath    string
-	MaxCommits  int  // 0 = unlimited
-	SkipHistory bool // skip commit history, only check working tree files
+	MaxCommits  int    // 0 = unlimited
+	SkipHistory bool   // skip commit history, only check working tree files
+	SinceCommit string // if set, only scan commits reachable from HEAD but not from this SHA (e.g. base branch SHA for PRs)
 }
 
 // Scan runs all git-history checks and returns findings.
@@ -40,7 +41,7 @@ func Scan(opts ScanOptions) (*ScanResult, error) {
 		result.Findings = append(result.Findings, scanEnvFiles(opts.RepoPath, ignoreList)...)
 
 		// 3. Scan git history for secrets in diff lines
-		histFindings, commits, files, err := scanHistory(opts.RepoPath, opts.MaxCommits, ignoreList)
+		histFindings, commits, files, err := scanHistory(opts.RepoPath, opts.MaxCommits, opts.SinceCommit, ignoreList)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +114,7 @@ func scanEnvFiles(repoPath string, ignore *git.IgnoreList) []Finding {
 }
 
 // scanHistory scans all added lines in git history for secrets.
-func scanHistory(repoPath string, maxCommits int, ignore *git.IgnoreList) ([]Finding, int, int, error) {
+func scanHistory(repoPath string, maxCommits int, sinceCommit string, ignore *git.IgnoreList) ([]Finding, int, int, error) {
 	var findings []Finding
 	commitsSeen := make(map[string]bool)
 	filesSeen := make(map[string]bool)
@@ -126,7 +127,7 @@ func scanHistory(repoPath string, maxCommits int, ignore *git.IgnoreList) ([]Fin
 	}
 	seen := make(map[findingKey]bool)
 
-	err := git.ScanHistory(repoPath, func(line git.DiffLine) {
+	err := git.ScanHistoryRange(repoPath, sinceCommit, func(line git.DiffLine) {
 		if line.CommitHash == "" || line.FilePath == "" {
 			return
 		}

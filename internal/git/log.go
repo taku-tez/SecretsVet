@@ -51,12 +51,30 @@ func ListAllCommits(repoPath string) ([]string, error) {
 // It runs `git log --all -p` and parses the unified diff output.
 // The callback receives each added line. Return true from callback to continue, false to stop.
 func ScanHistory(repoPath string, cb func(line DiffLine)) error {
+	return ScanHistoryRange(repoPath, "", cb)
+}
+
+// ScanHistoryRange is like ScanHistory but limits to commits reachable from HEAD
+// that are not reachable from sinceCommit. If sinceCommit is empty, all history is scanned.
+// This is equivalent to `git log <sinceCommit>..HEAD`.
+func ScanHistoryRange(repoPath, sinceCommit string, cb func(line DiffLine)) error {
+	var revRange string
+	if sinceCommit != "" {
+		revRange = sinceCommit + "..HEAD"
+	}
+
+	args := []string{"-C", repoPath, "log"}
+	if sinceCommit != "" {
+		// Range mode: only commits between sinceCommit and HEAD
+		args = append(args, revRange)
+	} else {
+		// Full history across all refs
+		args = append(args, "--all", "--full-history")
+	}
+	args = append(args, "--format=COMMIT:%H", "-p", "--no-color", "--diff-filter=AM")
+
 	// Use --no-color to ensure clean output, --diff-filter includes all changes
-	cmd := exec.Command(
-		"git", "-C", repoPath,
-		"log", "--all", "--full-history", "--format=COMMIT:%H",
-		"-p", "--no-color", "--diff-filter=AM",
-	)
+	cmd := exec.Command("git", args...)
 	out, err := cmd.Output()
 	if err != nil {
 		// git log returns exit code 128 on empty repos

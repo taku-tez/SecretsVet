@@ -31,6 +31,11 @@ func NewRegistry() *Registry {
 			NewLeaseRenewalRule(),
 			NewIAMOverPermRule(),
 			NewRotationRule(),
+			// v0.7.0 — Helm / Kustomize deep scan
+			NewHelmValuesRule(),
+			NewKustomizeSecretGenEnvRule(),
+			NewKustomizeSecretGenLiteralRule(),
+			NewHelmManagedSecretRule(),
 		},
 	}
 }

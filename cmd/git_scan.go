@@ -13,6 +13,7 @@ import (
 var (
 	gitMaxCommits  int
 	gitSkipHistory bool
+	gitSince       string
 )
 
 var gitScanCmd = &cobra.Command{
@@ -30,7 +31,8 @@ Detects:
 Examples:
   secretsvet git-scan .
   secretsvet git-scan /path/to/repo --output json
-  secretsvet git-scan . --max-commits 100`,
+  secretsvet git-scan . --max-commits 100
+  secretsvet git-scan . --since ${{ github.base_sha }} --output github-actions`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runGitScan,
 }
@@ -38,6 +40,7 @@ Examples:
 func init() {
 	gitScanCmd.Flags().IntVar(&gitMaxCommits, "max-commits", 0, "Maximum number of commits to scan (0 = all)")
 	gitScanCmd.Flags().BoolVar(&gitSkipHistory, "skip-history", false, "Skip commit history scan, only check .gitignore")
+	gitScanCmd.Flags().StringVar(&gitSince, "since", "", "Scan only commits reachable from HEAD but not from this commit SHA (e.g. base branch SHA for PR scans)")
 	rootCmd.AddCommand(gitScanCmd)
 }
 
@@ -51,6 +54,7 @@ func runGitScan(cmd *cobra.Command, args []string) error {
 		RepoPath:    repoPath,
 		MaxCommits:  gitMaxCommits,
 		SkipHistory: gitSkipHistory,
+		SinceCommit: gitSince,
 	})
 	if err != nil {
 		return fmt.Errorf("git-scan failed: %w", err)
@@ -59,6 +63,11 @@ func runGitScan(cmd *cobra.Command, args []string) error {
 	switch strings.ToLower(outputFormat) {
 	case "json":
 		f := &output.GitJSONFormatter{}
+		if err := f.WriteGit(os.Stdout, result); err != nil {
+			return fmt.Errorf("output failed: %w", err)
+		}
+	case "github-actions":
+		f := &output.GitHubActionsFormatter{}
 		if err := f.WriteGit(os.Stdout, result); err != nil {
 			return fmt.Errorf("output failed: %w", err)
 		}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/SecretsVet/secretsvet/internal/config"
 	"github.com/SecretsVet/secretsvet/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -11,6 +12,8 @@ import (
 var (
 	outputFormat string
 	noColor      bool
+	configFile   string
+	cfg          *config.Config
 )
 
 var rootCmd = &cobra.Command{
@@ -41,7 +44,16 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "tty", "Output format: tty, json, sarif")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "tty", "Output format: tty, json, sarif, github-actions")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable color output")
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Path to config file (default: .secretsvet.yaml)")
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		var err error
+		cfg, err = config.Load(configFile)
+		if err != nil {
+			return fmt.Errorf("config: %w", err)
+		}
+		return nil
+	}
 	rootCmd.AddCommand(versionCmd)
 }

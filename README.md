@@ -1,296 +1,427 @@
 # SecretsVet
 
-Kubernetes 環境における機密情報の漏洩・設定ミスを多層的に検出するセキュリティスキャナー。
+**Kubernetes secret misconfiguration scanner** — detects plaintext secrets, weak configurations, and historical leaks across manifests, git history, Helm/Kustomize, and live clusters.
 
-manifest の `env` 直書きに留まらず、ConfigMap・git 履歴・External Secrets・etcd 暗号化まで網羅する。
+```
+secretsvet scan ./k8s/
+secretsvet git-scan .
+secretsvet cluster-scan --all-namespaces
+```
 
 ---
 
-## K8sVet との統合 (主要ユースケース)
+## Contents
 
-SecretsVet は **[K8sVet](https://github.com/k8svet/k8svet) から呼び出されることを主目的として設計されています**。
-K8sVet の統合ランナーとして動作し、`k8svet scan` コマンドにシークレット検証機能を追加します。
-
-```bash
-# K8sVet 経由での使用イメージ
-k8svet scan .
-# → [SecretsVet]  ./  28 errors (secrets in env: 12, git history: 8, ESO config: 8)
-
-k8svet scan --cluster --all-namespaces
-# → [SecretsVet]  cluster://  5 errors (etcd unencrypted, SA token over-exposed x4)
-```
-
-### K8sVet 統合ロードマップ
-
-| SecretsVet | K8sVet | 内容 |
-|---|---|---|
-| v0.1.0 | K8sVet v0.5.0 | `k8svet scan .` に `secretsvet` ランナー追加 |
-| v0.4.0 | K8sVet v0.5.0 | `k8svet scan --cluster` にシークレット検証追加 |
-| v0.5.0 | K8sVet v0.6.0 | `k8svet scan . --fix` に SecretsVet 修正提案を統合 |
-
-### K8sVet 自動検出ルール
-
-K8sVet は以下のシグナルを検出した場合、自動的に SecretsVet を呼び出します:
-
-- `.env` / `.env.*` ファイルが存在する → git スキャンモードで実行
-- `ExternalSecret` / `SecretStore` を含む YAML → ESO 検証を実行
-- `--cluster` モード → etcd 暗号化・SA トークン設定を検証
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+  - [scan](#scan)
+  - [git-scan](#git-scan)
+  - [cluster-scan](#cluster-scan)
+  - [rules](#rules)
+  - [init](#init)
+- [Output Formats](#output-formats)
+- [Configuration (.secretsvet.yaml)](#configuration-secretsvetyaml)
+- [Baseline Suppression](#baseline-suppression)
+- [Fix Suggestions](#fix-suggestions)
+- [CI/CD Integration](#cicd-integration)
+- [Rule Reference](#rule-reference)
+- [K8sVet Integration](#k8svet-integration)
 
 ---
 
-## スタンドアロン使用
+## Installation
 
-K8sVet なしで単体 CLI として使用することもできます。
-
-### インストール
-
-```bash
-go install github.com/SecretsVet/secretsvet@latest
-```
-
-またはソースからビルド:
+**From source (requires Go 1.21+):**
 
 ```bash
 git clone https://github.com/SecretsVet/secretsvet
 cd secretsvet
-make install
+go install .
 ```
 
-### 必要環境
+**Requirements:**
 
-- Go 1.21 以上
-- `kubectl` (cluster-scan を使用する場合)
-- `kustomize` (--kustomize フラグを使用する場合)
-- `ANTHROPIC_API_KEY` 環境変数 (`--fix-llm` フラグを使用する場合)
+| Feature | Dependency |
+|---------|------------|
+| `cluster-scan` | `kubectl` configured |
+| `scan --kustomize` | `kustomize` CLI |
+| `scan --helm <dir>` | `helm` CLI |
+| `--fix-llm` | `ANTHROPIC_API_KEY` env var |
 
 ---
 
-## スキャンモード
-
-### 1. マニフェストスキャン (`scan`)
-
-YAML マニフェストから静的にシークレット設定ミスを検出します。
+## Quick Start
 
 ```bash
-# ディレクトリを再帰スキャン
+# Scan YAML manifests
 secretsvet scan ./k8s/
 
-# 単一ファイル
+# Scan entire git history
+secretsvet git-scan .
+
+# Scan live cluster
+secretsvet cluster-scan
+
+# Generate a config file tailored to your repo
+secretsvet init
+
+# List all 32 detection rules
+secretsvet rules
+```
+
+---
+
+## Commands
+
+### `scan`
+
+Scans YAML manifests for secret misconfigurations. Accepts files, directories, or `-` for stdin.
+
+```bash
+# Directory (recursive by default)
+secretsvet scan ./k8s/
+
+# Single file
 secretsvet scan deploy.yaml
 
-# JSON 出力 (CI/CD 連携向け)
-secretsvet scan ./manifests/ --output json
+# Multiple paths
+secretsvet scan ./base/ ./overlays/prod/
 
-# SARIF 出力 (GitHub Code Scanning 向け)
-secretsvet scan ./k8s/ --output sarif
+# Stdin (pipe from helm/kustomize)
+helm template ./mychart | secretsvet scan -
+kustomize build ./overlays/prod | secretsvet scan -
 
-# Kustomize ビルド後のマニフェストをスキャン
-secretsvet scan ./overlays/prod/ --kustomize
+# Run helm template automatically
+secretsvet scan ./k8s/ --helm ./charts/myapp
 
-# 重大度でフィルタ
+# Run kustomize build automatically
+secretsvet scan ./k8s/ --kustomize
+
+# Filter by severity
 secretsvet scan ./k8s/ --min-severity HIGH
 
-# CI/CD: 問題があれば exit code 1
+# Exit code 1 on any finding (for CI)
 secretsvet scan ./k8s/ --exit-code
 ```
 
-### 2. git 履歴スキャン (`git-scan`)
+**Flags:**
 
-git リポジトリの全コミット履歴を検索し、過去に漏洩した機密情報を検出します。
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--recursive` / `-r` | `true` | Recurse into subdirectories |
+| `--min-severity` | `LOW` | Minimum severity: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
+| `--exit-code` | `false` | Exit 1 if any findings are reported |
+| `--fix` | `false` | Print fix suggestions for each finding |
+| `--fix-lang` | `en` | Fix language: `en`, `ja` |
+| `--fix-llm` | `false` | Use Claude API for fix suggestions |
+| `--helm <dir>` | — | Run `helm template <dir>` and scan output |
+| `--kustomize` | `false` | Run `kustomize build` and scan output |
+| `--baseline <file>` | — | Suppress findings present in baseline file |
+| `--save-baseline <file>` | — | Save current findings as a baseline |
+
+---
+
+### `git-scan`
+
+Scans a git repository's **full commit history** for secrets — including deleted files and all branches.
 
 ```bash
-# カレントディレクトリのリポジトリをスキャン
+# Scan current repo
 secretsvet git-scan .
 
-# 特定のリポジトリ
+# Scan specific repo
 secretsvet git-scan /path/to/repo
 
-# 最新 100 コミットのみ
+# Limit to 100 most recent commits
 secretsvet git-scan . --max-commits 100
 
-# .gitignore 設定のみチェック (履歴スキャンをスキップ)
+# Only check .gitignore (skip history)
 secretsvet git-scan . --skip-history
 
-# JSON 出力
+# Scan only commits since a base SHA (for PR scans in CI)
+secretsvet git-scan . --since $BASE_SHA
+
+# JSON output
 secretsvet git-scan . --output json
 ```
 
-### 3. ライブクラスタースキャン (`cluster-scan`)
+**Detects:**
 
-稼働中の Kubernetes クラスターのシークレット設定を検証します。`kubectl` が設定済みである必要があります。
+- SV3010 — `.gitignore` missing patterns for secret file types
+- SV3020 — `.env` / `.env.*` files ever committed (CRITICAL)
+- SV3030 — Known secret patterns in commit history (AWS, GCP, GitHub, Slack, Stripe, Twilio...)
+- SV3040 — High-entropy tokens in commit history
+- SV3050 — Secrets in Helm `values.yaml` in history
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--max-commits` | `0` (all) | Maximum commits to scan |
+| `--skip-history` | `false` | Only check `.gitignore`, skip history scan |
+| `--since <sha>` | — | Scan only commits between this SHA and HEAD |
+
+---
+
+### `cluster-scan`
+
+Scans a **running Kubernetes cluster** via `kubectl`. Requires configured cluster access.
 
 ```bash
-# デフォルトコンテキストでスキャン
+# Current context, current namespace
 secretsvet cluster-scan
 
-# 特定のコンテキストと全 namespace
+# Specific context, all namespaces
 secretsvet cluster-scan --context production --all-namespaces
 
-# 特定 namespace のみ
+# Specific namespace
 secretsvet cluster-scan --namespace myapp
 
-# 特定チェックをスキップ
+# Skip expensive checks
 secretsvet cluster-scan --skip-etcd --skip-rbac
 
-# JSON 出力
+# JSON output
 secretsvet cluster-scan --output json
 ```
 
-### 4. 修正提案 (`--fix`)
+**Detects:**
 
-`scan` コマンドに `--fix` フラグを追加すると、各ルール違反に対して修正済み YAML スニペットを出力します。
+- SV4010 — etcd secrets not encrypted at rest (CRITICAL)
+- SV4030 — Pod auto-mounts ServiceAccount token unnecessarily
+- SV4040 — Secret volume mounted without `readOnly: true`
+- SV4050 — RBAC role grants `list`/`watch` on Secrets (HIGH)
+- SV4060 — `default` ServiceAccount has Secret access
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--context` | current | Kubeconfig context name |
+| `--namespace` / `-n` | current | Namespace to scan |
+| `--all-namespaces` | `false` | Scan all namespaces |
+| `--skip-etcd` | `false` | Skip etcd encryption checks |
+| `--skip-rbac` | `false` | Skip RBAC checks |
+| `--skip-runtime` | `false` | Skip runtime configuration checks |
+
+---
+
+### `rules`
+
+Lists all 32 detection rules. Useful for understanding what SecretsVet checks and for configuring suppressions.
 
 ```bash
-# 静的テンプレートによる修正提案 (無料)
-secretsvet scan ./k8s/ --fix
+# List all rules
+secretsvet rules
 
-# 日本語で修正提案
-secretsvet scan ./k8s/ --fix --fix-lang ja
+# Show detailed info for one rule
+secretsvet rules --id SV1010
 
-# Claude API による修正提案 (静的テンプレートがないルール向け)
-ANTHROPIC_API_KEY=sk-... secretsvet scan ./k8s/ --fix --fix-llm
+# Filter by category
+secretsvet rules --category git
+secretsvet rules --category manifest
+secretsvet rules --category external-secrets
+secretsvet rules --category cluster
+secretsvet rules --category helm-kustomize
 ```
 
 ---
 
-## ルールリファレンス
+### `init`
 
-### SV1xxx — 平文シークレット (マニフェスト)
+Generates a `.secretsvet.yaml` config file tailored to the repository structure.
 
-| ルール ID | 重大度 | 説明 |
-|---|---|---|
-| SV1010 | HIGH | `env[].value` へのパスワード/トークン/キーの正規表現マッチング |
-| SV1020 | HIGH | `env[].value` への高エントロピー文字列検出 |
-| SV1030 | HIGH | `args[]` / `command[]` へのシークレット埋め込み |
-| SV1040 | HIGH | ConfigMap の `data` への平文シークレット |
-| SV1050 | MEDIUM | `envFrom` で Secret 以外のソース (ConfigMap) を参照 |
-| SV1060 | HIGH | Secret リソースに base64 デコードして高エントロピーな値が含まれる |
-| SV1070 | LOW | Secret に `immutable: true` が設定されていない |
-| SV1080 | MEDIUM | namespace をまたいだ Secret 参照 |
+```bash
+# Generate in current directory
+secretsvet init
 
-### SV2xxx — External Secrets 設定ミス
+# Generate for a specific path
+secretsvet init /path/to/repo
 
-| ルール ID | 重大度 | 説明 |
-|---|---|---|
-| SV2010 | HIGH | ExternalSecret のキー参照が不正な形式 |
-| SV2020 | HIGH | SecretStore の接続設定の静的検証 |
-| SV2030 | MEDIUM | `refreshInterval` が 24h 以上 |
-| SV2040 | MEDIUM | `creationPolicy: Merge` による上書きリスク |
-| SV2050 | MEDIUM | remoteRef.key の重複・パスのタイポ |
-| SV2060 | HIGH | VaultStaticSecret/VaultDynamicSecret のパス設定ミス |
-| SV2070 | HIGH | Vault ロールの過剰権限 (wildcard SA, root/admin ポリシー) |
-| SV2080 | MEDIUM | VaultDynamicSecret の `leaseRenewalPercent` 未設定 |
-| SV2090 | HIGH | IAM ロールのシークレット読み取り権限が過剰 |
-| SV2100 | MEDIUM | シークレットの自動ローテーション無効 (`refreshInterval: 0`) |
+# Overwrite existing file
+secretsvet init --force
+```
 
-### SV3xxx — git 履歴漏洩
-
-| ルール ID | 重大度 | 説明 |
-|---|---|---|
-| SV3010 | MEDIUM | `.gitignore` が `*.env` / `*secret*` などのパターンを含まない |
-| SV3020 | HIGH | `.env` / `.env.local` ファイルのコミット検出 |
-| SV3030 | HIGH | git 履歴内のシークレットパターン (AWS/GCP/GitHub/Slack/Stripe/Twilio など) |
-| SV3040 | HIGH | git 履歴内の高エントロピー文字列 |
-| SV3050 | HIGH | Helm `values.yaml` への平文シークレット記載 |
-
-### SV4xxx — etcd / ランタイム設定
-
-| ルール ID | 重大度 | 説明 |
-|---|---|---|
-| SV4010 | HIGH | etcd 暗号化未設定 / `identity` プロバイダー使用 |
-| SV4030 | MEDIUM | Pod の `automountServiceAccountToken` が未設定 |
-| SV4040 | MEDIUM | Secret ボリュームが `readOnly: true` なしでマウント |
-| SV4050 | HIGH | RBAC ロールが Secret に対して `list`/`watch` 権限を持つ |
-| SV4060 | HIGH | `default` ServiceAccount に Secret アクセス権限 |
+Automatically detects:
+- Helm charts → suggests `scan --helm` ignore patterns
+- Kustomize overlays → adds `secretGenerator` guidance
+- Test directories → offers to exclude from scanning
+- `.env` files → suggests `.gitignore` patterns
 
 ---
 
-## 出力フォーマット
+## Output Formats
 
-### TTY (デフォルト)
+All commands accept `--output` (or `-o`):
 
-カラー付きのターミナル出力。ファイルパス・行番号・重大度・メッセージを表示。
-
-```
-[HIGH]   deploy.yaml:23  SV1010  env[].value contains a secret: DB_PASSWORD matches password pattern
-[MEDIUM] config.yaml:8   SV1040  ConfigMap data contains plaintext secret: API_KEY
-```
+| Format | Flag | Best for |
+|--------|------|----------|
+| TTY (color) | `tty` (default) | Terminal |
+| JSON | `json` | CI pipelines, `jq` processing |
+| SARIF | `sarif` | GitHub Code Scanning |
+| GitHub Actions | `github-actions` | PR annotations |
 
 ### JSON
 
-構造化された JSON 出力。パイプ処理や CI/CD での解析に適しています。
-
 ```bash
-secretsvet scan ./k8s/ --output json | jq '.findings[] | select(.severity == "HIGH")'
+secretsvet scan ./k8s/ --output json
 ```
 
 ```json
 {
-  "version": "0.1.0",
-  "findings": [
-    {
-      "rule_id": "SV1010",
-      "severity": "HIGH",
-      "file": "deploy.yaml",
-      "line": 23,
-      "resource_kind": "Deployment",
-      "resource_name": "my-app",
-      "namespace": "default",
-      "message": "env[].value contains a secret: DB_PASSWORD matches password pattern",
-      "detail": "env var: DB_PASSWORD, value: s3cr3t..."
-    }
-  ],
+  "version": "0.1.0-dev",
   "summary": {
     "total": 1,
+    "critical": 0,
     "high": 1,
     "medium": 0,
     "low": 0
-  }
+  },
+  "findings": [
+    {
+      "rule_id": "SV1010",
+      "severity": "high",
+      "message": "env[].value contains a secret pattern (aws-access-key-id)",
+      "file": "deploy.yaml",
+      "line": 14,
+      "resource_kind": "Deployment",
+      "resource_name": "my-app",
+      "namespace": "default",
+      "detail": "env var: AWS_SECRET_KEY, value: AKIA...[REDACTED]"
+    }
+  ]
 }
+```
+
+```bash
+# Filter HIGH+ findings with jq
+secretsvet scan ./k8s/ --output json | jq '.findings[] | select(.severity == "high" or .severity == "critical")'
 ```
 
 ### SARIF
 
-[SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/) 形式。GitHub Advanced Security の Code Scanning と統合できます。
+Integrates with GitHub Advanced Security / Code Scanning:
 
 ```yaml
-# .github/workflows/secretsvet.yml
-- name: Run SecretsVet
-  run: secretsvet scan ./k8s/ --output sarif > results.sarif
-
-- name: Upload SARIF
-  uses: github/codeql-action/upload-sarif@v3
+- run: secretsvet scan ./k8s/ --output sarif > results.sarif
+- uses: github/codeql-action/upload-sarif@v3
   with:
     sarif_file: results.sarif
 ```
 
+### GitHub Actions annotations
+
+Outputs `::error` and `::warning` workflow commands for inline PR annotations:
+
+```yaml
+- run: secretsvet scan ./k8s/ --output github-actions --exit-code
+```
+
 ---
 
-## ホワイトリスト設定
+## Configuration (`.secretsvet.yaml`)
 
-プロジェクトルートに `.secretsvet-ignore` ファイルを作成することで、特定の検出を無視できます。
+Generate a starter config with `secretsvet init`, or create manually:
+
+```yaml
+# .secretsvet.yaml
+
+rules:
+  # Disable a rule entirely
+  SV6040:
+    disabled: true
+
+  # Override severity for a rule
+  SV1070:
+    severity: HIGH
+
+thresholds:
+  # Minimum token length for entropy checks (default: 20)
+  entropy_min_length: 24
+
+ignore:
+  paths:
+    - tests/**
+    - "**/*_test.yaml"
+    - testdata/**
+```
+
+Load a config from a custom path:
+
+```bash
+secretsvet scan ./k8s/ --config /path/to/.secretsvet.yaml
+```
+
+### `.secretsvet-ignore`
+
+For suppressing specific findings by rule ID, file glob, or commit hash:
 
 ```
-# ルール ID を無視
+# Ignore a rule globally
 SV1070
 
-# ファイルグロブを無視
+# Ignore a file pattern
 testdata/**
 internal/**/*_test.go
 
-# コミットハッシュプレフィックスを無視 (git-scan)
-abc123
+# Ignore a specific commit (git-scan)
+abc12345
 ```
 
 ---
 
-## CI/CD 統合
+## Baseline Suppression
 
-### GitHub Actions
+Baseline suppression lets teams introduce SecretsVet without fixing all existing findings at once — only **new** findings fail CI.
+
+```bash
+# Step 1: Save current state as baseline
+secretsvet scan ./k8s/ --save-baseline .secretsvet-baseline.json
+
+# Step 2: In CI, only report findings not in baseline
+secretsvet scan ./k8s/ --baseline .secretsvet-baseline.json --exit-code
+```
+
+Fingerprints are based on `RuleID + File + ResourceKind + ResourceName + Namespace` — stable across line number changes.
+
+Commit the baseline file to version control.
+
+---
+
+## Fix Suggestions
+
+```bash
+# Static fix templates (built-in, no API key needed)
+secretsvet scan ./k8s/ --fix
+
+# Japanese explanations
+secretsvet scan ./k8s/ --fix --fix-lang ja
+
+# Claude API for rules without static templates
+ANTHROPIC_API_KEY=sk-... secretsvet scan ./k8s/ --fix --fix-llm
+```
+
+Each finding includes:
+- **Problem** — why the finding is a security risk
+- **Solution** — recommended remediation
+- **YAML snippet** — ready-to-apply fix
+
+Static templates exist for: SV1010, SV1020, SV1030, SV1040, SV1050, SV1060, SV1070, SV2030, SV2040, SV2080, SV2100, SV3010, SV4030, SV4040, SV6010, SV6020, SV6030, SV6040.
+
+---
+
+## CI/CD Integration
+
+### GitHub Actions — full workflow
 
 ```yaml
+# .github/workflows/secretsvet.yml
 name: SecretsVet
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
   secretsvet:
@@ -298,7 +429,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # git-scan には全履歴が必要
+          fetch-depth: 0  # required for git-scan
 
       - uses: actions/setup-go@v5
         with:
@@ -307,22 +438,53 @@ jobs:
       - name: Install SecretsVet
         run: go install github.com/SecretsVet/secretsvet@latest
 
-      # マニフェストスキャン
+      # Scan manifests with SARIF upload
       - name: Scan manifests
-        run: secretsvet scan ./k8s/ --exit-code --output sarif > manifest.sarif
-
-      # git 履歴スキャン
-      - name: Scan git history
-        run: secretsvet git-scan . --exit-code
+        run: secretsvet scan ./k8s/ --output sarif > manifest.sarif
 
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: manifest.sarif
         if: always()
+
+      # PR-scoped git-scan (only new commits)
+      - name: Scan git history (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          secretsvet git-scan . \
+            --since ${{ github.event.pull_request.base.sha }} \
+            --output github-actions \
+            --exit-code
+
+      # Full git-scan on main
+      - name: Scan git history (full)
+        if: github.event_name == 'push'
+        run: secretsvet git-scan . --output github-actions --exit-code
 ```
 
-### pre-commit フック
+### GitHub Actions — baseline mode (recommended for brownfield projects)
+
+```yaml
+# On main: save baseline
+- name: Update baseline
+  if: github.ref == 'refs/heads/main'
+  run: |
+    secretsvet scan ./k8s/ --save-baseline .secretsvet-baseline.json
+    git add .secretsvet-baseline.json
+    git diff --staged --quiet || git commit -m "chore: update secretsvet baseline"
+
+# On PR: only new findings fail
+- name: Check for new findings
+  if: github.event_name == 'pull_request'
+  run: |
+    secretsvet scan ./k8s/ \
+      --baseline .secretsvet-baseline.json \
+      --output github-actions \
+      --exit-code
+```
+
+### Pre-commit hook
 
 ```yaml
 # .pre-commit-config.yaml
@@ -332,25 +494,93 @@ repos:
       - id: secretsvet
         name: SecretsVet
         entry: secretsvet scan
-        args: ['--exit-code', '--min-severity', 'HIGH']
+        args: [--exit-code, --min-severity, HIGH]
         language: system
         types: [yaml]
 ```
 
 ---
 
-## ルールID体系
+## Rule Reference
 
-```
-SV1xxx  平文シークレット (manifest)
-SV2xxx  External Secrets 設定ミス
-SV3xxx  git 履歴漏洩
-SV4xxx  etcd / ランタイム設定
-SV5xxx  RBAC × Secret アクセス (予定)
-```
+### SV1xxx — Plaintext secrets (manifests)
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| SV1010 | HIGH | Secret pattern in `env[].value` (AWS, GitHub, Stripe, etc.) |
+| SV1020 | MEDIUM | High-entropy string in `env[].value` |
+| SV1030 | HIGH | Secret embedded in `args[]` or `command[]` |
+| SV1040 | HIGH | Plaintext secret in ConfigMap `data` |
+| SV1050 | LOW | `envFrom` references a ConfigMap instead of a Secret |
+| SV1060 | HIGH | Secret resource data contains known pattern (after base64 decode) |
+| SV1070 | LOW | Secret missing `immutable: true` |
+| SV1080 | MEDIUM | Cross-namespace Secret reference |
+
+### SV2xxx — External Secrets misconfiguration
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| SV2010 | HIGH | ExternalSecret key reference format is invalid |
+| SV2020 | HIGH | SecretStore provider config is missing required fields |
+| SV2030 | MEDIUM | `refreshInterval` exceeds 24 hours |
+| SV2040 | MEDIUM | `creationPolicy: Merge` — unintended overwrite risk |
+| SV2050 | LOW | `remoteRef.key` may contain a typo |
+| SV2060 | MEDIUM | VaultStaticSecret / VaultDynamicSecret path config issue |
+| SV2070 | HIGH | Vault role has overly broad permissions |
+| SV2080 | MEDIUM | VaultDynamicSecret missing `leaseRenewalPercent` |
+| SV2090 | MEDIUM | IAM role has overly broad secret read permissions |
+| SV2100 | MEDIUM | Secret auto-refresh disabled (`refreshInterval: 0`) |
+
+### SV3xxx — Git history leaks
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| SV3010 | MEDIUM | `.gitignore` missing patterns for secret file types |
+| SV3020 | CRITICAL | `.env` or environment file committed to git history |
+| SV3030 | CRITICAL | Known secret pattern found in git history |
+| SV3040 | MEDIUM | High-entropy token found in git history |
+| SV3050 | HIGH | Secret in Helm `values.yaml` in git history |
+
+### SV4xxx — etcd / runtime configuration
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| SV4010 | CRITICAL | etcd secrets not encrypted at rest |
+| SV4030 | MEDIUM | Pod auto-mounts ServiceAccount token unnecessarily |
+| SV4040 | MEDIUM | Secret volume mounted without `readOnly: true` |
+| SV4050 | HIGH | RBAC role grants `list`/`watch` on Secrets |
+| SV4060 | HIGH | `default` ServiceAccount has Secret access |
+
+### SV6xxx — Helm / Kustomize
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| SV6010 | HIGH | Plaintext secret in Helm `values.yaml` |
+| SV6020 | HIGH | Kustomize `secretGenerator` references a `.env` file |
+| SV6030 | HIGH | Kustomize `secretGenerator.literals[]` contains plaintext secret |
+| SV6040 | MEDIUM | Helm directly manages a Kubernetes Secret |
 
 ---
 
-## ライセンス
+## K8sVet Integration
+
+SecretsVet is designed to run as a sub-scanner inside [K8sVet](https://github.com/k8svet/k8svet):
+
+```bash
+k8svet scan .
+# → [SecretsVet]  ./  28 errors (secrets in env: 12, git history: 8, ESO config: 8)
+
+k8svet scan --cluster --all-namespaces
+# → [SecretsVet]  cluster://  5 errors (etcd unencrypted, SA token over-exposed x4)
+```
+
+K8sVet auto-invokes SecretsVet when it detects:
+- `.env` / `.env.*` files → runs `git-scan` mode
+- `ExternalSecret` / `SecretStore` resources → runs ESO validation
+- `--cluster` flag → runs etcd encryption + SA token checks
+
+---
+
+## License
 
 MIT

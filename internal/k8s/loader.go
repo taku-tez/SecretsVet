@@ -19,9 +19,14 @@ type LoadOptions struct {
 }
 
 // LoadPath loads all Kubernetes resources from the given path.
+// If path is "-", resources are read from os.Stdin (for use with helm template | secretsvet scan -).
 // If path is a directory, it walks the directory (and subdirs if Recursive).
 // If Kustomize is true and a kustomization.yaml is found, it runs kustomize build.
 func LoadPath(path string, opts LoadOptions) ([]*Resource, error) {
+	if path == "-" {
+		return parseYAML(os.Stdin, "<stdin>")
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", path, err)
